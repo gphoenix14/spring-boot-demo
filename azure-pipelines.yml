@@ -29,6 +29,12 @@ steps:
 # Aggiungi un passo per elencare i file, se necessario, per debugging
 - script: ls $(Build.ArtifactStagingDirectory)
   displayName: 'Elenco dei file nella cartella di staging'
+- script: find $(Build.SourcesDirectory) -type f
+  displayName: 'Trova e elenca tutti i file nel directory sorgente'
+
+- script: find $(Build.ArtifactStagingDirectory) -type f
+  displayName: 'Trova e elenca tutti i file nella directory di staging'
+
 
 # Pubblica l'artifact della build
 - task: PublishBuildArtifacts@1
