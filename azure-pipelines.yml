@@ -22,9 +22,9 @@ steps:
 # Assicurati che i file .war siano generati e posizionati nella cartella di destinazione
 - task: CopyFiles@2
   inputs:
-    SourceFolder: '$(Build.SourcesDirectory)/target' # Assicurati che questo percorso sia corretto
-    Contents: '**/*.war' # Specifica che vogliamo copiare solo i file .war
-    TargetFolder: '$(Build.ArtifactStagingDirectory)' # Copia i file nella cartella di staging dell'artifact
+    SourceFolder: '$(Build.SourcesDirectory)/target'
+    Contents: 'project-0.0.1-SNAPSHOT.war' # Specifica il nome esatto del file .war
+    TargetFolder: '$(Build.ArtifactStagingDirectory)'
 
 # Aggiungi un passo per elencare i file, se necessario, per debugging
 - script: ls $(Build.ArtifactStagingDirectory)
