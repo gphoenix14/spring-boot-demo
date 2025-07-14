@@ -18,6 +18,7 @@ import java.security.SecureRandom;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.KeySpec;
 import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
 
 import javax.crypto.BadPaddingException;
@@ -157,6 +158,47 @@ return kf.generatePrivate(new PKCS8EncodedKeySpec(pkcs8));
 throw new IllegalArgumentException("Password errata o chiave corrotta",e);
 }
 }
+
+/* sostituisci l’intero metodo rsaEncrypt e aggiungi parseSshRsa() */
+
+public static String rsaEncrypt(String plaintext,String keyString){
+    try{
+        PublicKey pub = keyString.startsWith("ssh-rsa ")
+                ? parseSshRsa(keyString)
+                : KeyFactory.getInstance("RSA")
+                      .generatePublic(new X509EncodedKeySpec(Base64.getDecoder().decode(keyString)));
+
+        Cipher c = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding");
+        c.init(Cipher.ENCRYPT_MODE,pub);
+        byte[] ct = c.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
+        return Base64.getEncoder().encodeToString(ct);
+    }catch(Exception e){
+        throw new IllegalStateException("RSA encrypt failed",e);
+    }
+}
+
+/* converte “ssh-rsa AAAA...” in RSAPublicKey */
+private static PublicKey parseSshRsa(String ssh) throws Exception{
+    String b64 = ssh.trim().split("\\s+")[1];          // scarta prefisso e commento
+    byte[] data = Base64.getDecoder().decode(b64);
+    ByteBuffer buf = ByteBuffer.wrap(data);
+
+    int len = buf.getInt(); byte[] type=new byte[len]; buf.get(type);
+    if(!"ssh-rsa".equals(new String(type,StandardCharsets.US_ASCII)))
+        throw new IllegalArgumentException("Not an ssh-rsa key");
+
+    BigInteger e = readMpInt(buf);
+    BigInteger n = readMpInt(buf);
+
+    return KeyFactory.getInstance("RSA")
+            .generatePublic(new java.security.spec.RSAPublicKeySpec(n,e));
+}
+private static BigInteger readMpInt(ByteBuffer buf){
+    int len = buf.getInt();
+    byte[] val = new byte[len]; buf.get(val);
+    return new BigInteger(val);
+}
+
 
 
 }

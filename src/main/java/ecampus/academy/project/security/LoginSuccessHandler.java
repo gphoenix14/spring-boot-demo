@@ -46,12 +46,12 @@ public void onAuthenticationSuccess(HttpServletRequest req, HttpServletResponse 
             String pem = Base64.getEncoder().encodeToString(
                     CryptoUtils.decryptPrivateKey(rawPwd.toCharArray(), user.getPrivateKeyEnc()).getEncoded());
 
-            Cookie c = new Cookie("rsaPriv", pem);
-            c.setHttpOnly(true);
-            c.setSecure(req.isSecure());
-            c.setPath("/");
-            c.setMaxAge(3600);             // 1 ora
-            res.addCookie(c);
+            Cookie c=new Cookie("rsaPriv", pem);
+                c.setHttpOnly(false);        // deve essere leggibile da JS per la decrittazione
+                c.setSecure(req.isSecure());
+                c.setPath("/");
+                c.setMaxAge(3600);
+                res.addCookie(c);
         } catch (Exception e) {
             res.sendRedirect(req.getContextPath() + "/login?error");
             return;

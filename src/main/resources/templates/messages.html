@@ -51,37 +51,87 @@
 <body>
     <div class="container">
         <h2>Messages</h2>
+
+        <!-- ======= FORM INVIO ======= -->
         <div class="message-form">
             <form th:action="@{/messages/send}" method="post">
                 <input type="text" name="content" placeholder="Write a message" />
                 <button type="submit" name="sendPrivate" value="false">Send Broadcast</button>
+
                 <select name="receiverUsername">
                     <option value="">Select a user</option>
-                    <option th:each="user : ${users}" th:value="${user.username}" th:text="${user.username}"></option>
+                    <option th:each="user : ${users}"
+                            th:value="${user.username}"
+                            th:text="${user.username}">
+                    </option>
                 </select>
+
                 <button type="submit" name="sendPrivate" value="true">Send Private</button>
             </form>
         </div>
+
+        <!-- ======= LISTA MESSAGGI ======= -->
         <div class="message-container">
-            <div th:each="message : ${messagePage.content}" class="message">
+            <div th:each="message : ${messagePage.content}"
+                 class="message"
+                 th:attr="data-broadcast=${message.isBroadcast},data-ct=${message.content}">
                 <p>
                     <span th:text="${#temporals.format(message.timestamp, 'dd/MM/yyyy HH:mm')}"></span>
                     <span th:text="${message.sender.username}"></span>
                     <span th:if="${message.isBroadcast}" th:text="' -> tutti'"></span>
                     <span th:if="${!message.isBroadcast}" th:text="' -> ' + ${message.receiver.username}"></span>:
-                    <span th:text="${message.content}"></span>
+                    <!-- il testo rimane ma sarà sostituito da JS se criptato -->
+                    <span class="msg-body" th:text="${message.content}"></span>
                 </p>
             </div>
         </div>
-        <!-- Paginazione e selezione dimensione pagina -->
+
+        <!-- ======= PAGINAZIONE ======= -->
         <div>
-            <a th:if="${messagePage.hasPrevious()}" th:href="@{/messages(page=${messagePage.number - 1}, size=${messagePage.size})}">Precedente</a>
-            <a th:if="${messagePage.hasNext()}" th:href="@{/messages(page=${messagePage.number + 1}, size=${messagePage.size})}">Successivo</a>
-            | Visualizza: 
+            <a th:if="${messagePage.hasPrevious()}"
+               th:href="@{/messages(page=${messagePage.number - 1}, size=${messagePage.size})}">
+               Precedente
+            </a>
+            <a th:if="${messagePage.hasNext()}"
+               th:href="@{/messages(page=${messagePage.number + 1}, size=${messagePage.size})}">
+               Successivo
+            </a>
+            | Visualizza:
             <a th:href="@{/messages(page=0, size=5)}">5</a>
             <a th:href="@{/messages(page=0, size=10)}">10</a>
             <a th:href="@{/messages(page=0, size=20)}">20</a> messaggi per pagina
         </div>
     </div>
+
+    <!-- ======= SCRIPT DECRIPTAZIONE CLIENT ======= -->
+    <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+        /* recupero chiave RSA privata dal cookie (PKCS8 base64) */
+        const match = document.cookie.match(/(?:^|;\s*)rsaPriv=([^;]+)/);
+        if (!match) return;                                   // nessuna chiave → niente da decriptare
+        const pkcs8 = Uint8Array.from(atob(decodeURIComponent(match[1])), c => c.charCodeAt(0));
+
+        /* importo chiave in WebCrypto */
+        const privateKey = await crypto.subtle.importKey(
+            'pkcs8',
+            pkcs8,
+            { name: 'RSA-OAEP', hash: 'SHA-256' },
+            false,
+            ['decrypt']
+        );
+
+        /* ciclo su ogni messaggio non broadcast e provo la decrittazione */
+        document.querySelectorAll('.message').forEach(async div => {
+            if (div.dataset.broadcast === 'true') return;     // broadcast in chiaro
+            const cipherText = Uint8Array.from(atob(div.dataset.ct), c => c.charCodeAt(0));
+            try {
+                const plain = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, privateKey, cipherText);
+                div.querySelector('.msg-body').textContent = new TextDecoder().decode(plain);
+            } catch (e) {
+                div.querySelector('.msg-body').textContent = '[DECRYPT ERROR]';
+            }
+        });
+    });
+    </script>
 </body>
 </html>

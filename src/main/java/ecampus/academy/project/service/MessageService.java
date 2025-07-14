@@ -16,6 +16,7 @@ import ecampus.academy.project.model.Message;
 import ecampus.academy.project.model.User;
 import ecampus.academy.project.repository.MessageRepository;
 import ecampus.academy.project.repository.UserRepository;
+import ecampus.academy.project.util.CryptoUtils;
 
 @Service
 public class MessageService {
@@ -37,15 +38,16 @@ User sender=userRepository.findByUsername(senderUsername)
 message.setSender(sender);
 
 if(!isBroadcast){
-if(receiverUsername==null||receiverUsername.isBlank())
-    throw new IllegalArgumentException("Username destinatario mancante");
-User receiver=userRepository.findByUsername(receiverUsername)
+    if(receiverUsername==null||receiverUsername.isBlank())
+        throw new IllegalArgumentException("Username destinatario mancante");
+    User receiver=userRepository.findByUsername(receiverUsername)
         .orElseThrow(() -> new IllegalArgumentException("Utente destinatario non trovato"));
-message.setReceiver(receiver);
-message.setBroadcast(false);
+    message.setReceiver(receiver);
+    message.setContent(CryptoUtils.rsaEncrypt(message.getContent(),receiver.getPublicKey())); // ⇐ cifra con chiave pubblica
+    message.setBroadcast(false);
 }else{
-message.setReceiver(null);
-message.setBroadcast(true);
+    message.setReceiver(null);
+    message.setBroadcast(true);             // broadcast resta in chiaro
 }
 
 if(message.getTimestamp()==null)

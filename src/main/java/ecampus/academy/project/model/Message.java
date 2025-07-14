@@ -2,6 +2,7 @@ package ecampus.academy.project.model;
 
 import java.time.LocalDateTime;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -11,22 +12,23 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
 @Entity
-@Table(name = "messages")
+@Table(name="messages")
 public class Message {
 
 @Id
-@GeneratedValue(strategy = GenerationType.IDENTITY)
+@GeneratedValue(strategy=GenerationType.IDENTITY)
 private Long id;
 
-@ManyToOne
-@JoinColumn(name = "sender_id")
+@ManyToOne @JoinColumn(name="sender_id")
 private User sender;
 
-@ManyToOne
-@JoinColumn(name = "receiver_id")
+@ManyToOne @JoinColumn(name="receiver_id")
 private User receiver;
 
+/* ✱✱  ora TEXT ✱✱ */
+@Column(nullable=false, columnDefinition="TEXT")
 private String content;
+
 private LocalDateTime timestamp;
 private boolean isBroadcast;
 
