@@ -17,6 +17,7 @@ import java.security.PublicKey;
 import java.security.SecureRandom;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.KeySpec;
+import java.security.spec.MGF1ParameterSpec;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
@@ -28,7 +29,9 @@ import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.OAEPParameterSpec;
 import javax.crypto.spec.PBEKeySpec;
+import javax.crypto.spec.PSource;
 import javax.crypto.spec.SecretKeySpec;
 
 public final class CryptoUtils {
@@ -161,19 +164,28 @@ throw new IllegalArgumentException("Password errata o chiave corrotta",e);
 
 /* sostituisci l’intero metodo rsaEncrypt e aggiungi parseSshRsa() */
 
-public static String rsaEncrypt(String plaintext,String keyString){
+public static String rsaEncrypt(String plaintext, String keyString){
     try{
         PublicKey pub = keyString.startsWith("ssh-rsa ")
                 ? parseSshRsa(keyString)
                 : KeyFactory.getInstance("RSA")
-                      .generatePublic(new X509EncodedKeySpec(Base64.getDecoder().decode(keyString)));
+                    .generatePublic(new X509EncodedKeySpec(Base64.getDecoder().decode(keyString)));
+
+        /* OAEP completamente esplicitato: digest SHA‑256 e MGF1 SHA‑256 */
+        OAEPParameterSpec oaep256 = new OAEPParameterSpec(
+                "SHA-256",
+                "MGF1",
+                MGF1ParameterSpec.SHA256,
+                PSource.PSpecified.DEFAULT);
 
         Cipher c = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding");
-        c.init(Cipher.ENCRYPT_MODE,pub);
+        c.init(Cipher.ENCRYPT_MODE, pub, oaep256);
+
         byte[] ct = c.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
         return Base64.getEncoder().encodeToString(ct);
+
     }catch(Exception e){
-        throw new IllegalStateException("RSA encrypt failed",e);
+        throw new IllegalStateException("RSA encrypt failed", e);
     }
 }
 

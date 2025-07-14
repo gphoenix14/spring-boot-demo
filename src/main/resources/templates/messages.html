@@ -104,34 +104,43 @@
     </div>
 
     <!-- ======= SCRIPT DECRIPTAZIONE CLIENT ======= -->
-    <script>
-    document.addEventListener('DOMContentLoaded', async () => {
-        /* recupero chiave RSA privata dal cookie (PKCS8 base64) */
-        const match = document.cookie.match(/(?:^|;\s*)rsaPriv=([^;]+)/);
-        if (!match) return;                                   // nessuna chiave → niente da decriptare
-        const pkcs8 = Uint8Array.from(atob(decodeURIComponent(match[1])), c => c.charCodeAt(0));
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
 
-        /* importo chiave in WebCrypto */
-        const privateKey = await crypto.subtle.importKey(
-            'pkcs8',
-            pkcs8,
-            { name: 'RSA-OAEP', hash: 'SHA-256' },
-            false,
-            ['decrypt']
-        );
+    /* recupero chiave privata PKCS8 dal cookie */
+    const match = document.cookie.match(/(?:^|;\s*)rsaPriv=([^;]+)/);
+    if (!match) return;
 
-        /* ciclo su ogni messaggio non broadcast e provo la decrittazione */
-        document.querySelectorAll('.message').forEach(async div => {
-            if (div.dataset.broadcast === 'true') return;     // broadcast in chiaro
-            const cipherText = Uint8Array.from(atob(div.dataset.ct), c => c.charCodeAt(0));
-            try {
-                const plain = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, privateKey, cipherText);
-                div.querySelector('.msg-body').textContent = new TextDecoder().decode(plain);
-            } catch (e) {
-                div.querySelector('.msg-body').textContent = '[DECRYPT ERROR]';
-            }
-        });
+    const pkcs8 = Uint8Array.from(atob(decodeURIComponent(match[1])),
+                                  c => c.charCodeAt(0));
+
+    /* ✱ algoritmo completo con hash = SHA‑256 ✱ */
+    const algo = { name: 'RSA-OAEP', hash: 'SHA-256' };
+
+    /* importo la chiave privata */
+    const privateKey = await crypto.subtle.importKey(
+        'pkcs8',
+        pkcs8,
+        algo,
+        false,
+        ['decrypt']
+    );
+
+    /* tenta la decrittazione di ogni messaggio privato */
+    document.querySelectorAll('.message').forEach(async div => {
+        if (div.dataset.broadcast === 'true') return;  // broadcast già in chiaro
+
+        try {
+            const ct = Uint8Array.from(atob(div.dataset.ct), c=>c.charCodeAt(0));
+            const pt = await crypto.subtle.decrypt(algo, privateKey, ct);
+            div.querySelector('.msg-body').textContent =
+                new TextDecoder().decode(pt);
+        } catch {
+            div.querySelector('.msg-body').textContent = '[DECRYPT ERROR]';
+        }
     });
-    </script>
+});
+</script>
+
 </body>
 </html>
