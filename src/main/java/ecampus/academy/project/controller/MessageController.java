@@ -1,19 +1,22 @@
-package criff.academy.project.controller;
+package ecampus.academy.project.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter; // Importa la classe Sort corretta
 
-import criff.academy.project.service.MessageService;
-import criff.academy.project.model.Message;
-import criff.academy.project.repository.UserRepository;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Sort; // Importa la classe Sort corretta
+import ecampus.academy.project.model.Message;
+import ecampus.academy.project.repository.UserRepository;
+import ecampus.academy.project.service.MessageService;
 
 
 @Controller

@@ -1,4 +1,4 @@
-package criff.academy.project.controller;
+package ecampus.academy.project.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
@@ -7,8 +7,8 @@ import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
-import criff.academy.project.service.UserService;
-import criff.academy.project.model.User;
+import ecampus.academy.project.service.UserService;
+import ecampus.academy.project.model.User;
 
 @Controller
 public class UserController {
