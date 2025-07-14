@@ -2,8 +2,12 @@ package ecampus.academy.project.util;
 
 import java.io.ByteArrayOutputStream;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
+import java.security.InvalidAlgorithmParameterException;
+import java.security.InvalidKeyException;
+import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.MessageDigest;
@@ -11,10 +15,15 @@ import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.SecureRandom;
+import java.security.spec.InvalidKeySpecException;
 import java.security.spec.KeySpec;
+import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.Base64;
 
+import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.IvParameterSpec;
@@ -125,4 +134,29 @@ return Base64.getUrlEncoder().withoutPadding().encodeToString(digest).substring(
 throw new IllegalStateException(e);
 }
 }
+public static PrivateKey decryptPrivateKey(char[] password,String encB64){
+try{
+byte[] combo=Base64.getDecoder().decode(encB64);
+ByteBuffer buf=ByteBuffer.wrap(combo);
+byte[] salt=new byte[16];buf.get(salt);
+byte[] iv=new byte[16];buf.get(iv);
+byte[] cipherText=new byte[buf.remaining()];buf.get(cipherText);
+
+SecretKeyFactory skf=SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+KeySpec spec=new PBEKeySpec(password,salt,100_000,256);
+SecretKey tmp=skf.generateSecret(spec);
+SecretKey secret=new SecretKeySpec(tmp.getEncoded(),"AES");
+
+Cipher cipher=Cipher.getInstance("AES/CBC/PKCS5Padding");
+cipher.init(Cipher.DECRYPT_MODE,secret,new IvParameterSpec(iv));
+byte[] pkcs8=cipher.doFinal(cipherText);
+
+KeyFactory kf=KeyFactory.getInstance("RSA");
+return kf.generatePrivate(new PKCS8EncodedKeySpec(pkcs8));
+}catch(InvalidAlgorithmParameterException | InvalidKeyException | NoSuchAlgorithmException | InvalidKeySpecException | BadPaddingException | IllegalBlockSizeException | NoSuchPaddingException e){
+throw new IllegalArgumentException("Password errata o chiave corrotta",e);
+}
+}
+
+
 }
