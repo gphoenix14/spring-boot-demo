@@ -1,9 +1,6 @@
 /* === WebSecurityConfig.java === */
 package ecampus.academy.project.config;
 
-import ecampus.academy.project.repository.UserRepository;
-import ecampus.academy.project.security.LoginSuccessHandler;
-import ecampus.academy.project.security.SshaPasswordEncoder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -11,12 +8,17 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 
+import ecampus.academy.project.repository.UserRepository;
+import ecampus.academy.project.security.LoginSuccessHandler;
+import ecampus.academy.project.security.SshaPasswordEncoder;
+
 @Configuration
 public class WebSecurityConfig {
 
 @Bean
 public PasswordEncoder passwordEncoder(){ return new SshaPasswordEncoder(); }
 
+@SuppressWarnings("removal")
 @Bean
 public SecurityFilterChain filterChain(HttpSecurity http,
                                        UserRepository userRepo) throws Exception {

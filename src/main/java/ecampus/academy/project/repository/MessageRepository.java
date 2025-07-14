@@ -11,13 +11,25 @@ import ecampus.academy.project.model.Message;
 
 public interface MessageRepository extends JpaRepository<Message, Long> {
 
-    @Query("SELECT m FROM Message m WHERE (m.sender.id = ?1 AND m.receiver.id = ?2) OR (m.sender.id = ?2 AND m.receiver.id = ?1) ORDER BY m.timestamp ASC")
+    @Query("""
+           SELECT m
+           FROM   Message m
+           WHERE  (m.sender.id = ?1 AND m.receiver.id = ?2)
+               OR (m.sender.id = ?2 AND m.receiver.id = ?1)
+           ORDER  BY m.timestamp ASC
+           """)
     List<Message> findAllMessagesBetweenUsers(Long userId1, Long userId2);
 
-    // Metodo esistente
     List<Message> findAllBySenderIdAndReceiverId(Long senderId, Long receiverId);
 
-    // Aggiungi questo metodo per supportare la paginazione e l'ordinamento
-    @Query("SELECT m FROM Message m WHERE (m.isBroadcast = true) OR (m.sender.id = ?1) OR (m.receiver.id = ?1) ORDER BY m.timestamp DESC")
+    /* ▼ nuovo criterio: niente più “ m.sender.id = ?1 ” semplice */
+    @Query("""
+           SELECT m
+           FROM   Message m
+           WHERE  m.isBroadcast = true
+               OR m.receiver.id   = ?1
+               OR (m.sender.id    = ?1 AND m.receiver.id = ?1)
+           ORDER  BY m.timestamp DESC
+           """)
     Page<Message> findRelevantMessages(Long userId, Pageable pageable);
 }

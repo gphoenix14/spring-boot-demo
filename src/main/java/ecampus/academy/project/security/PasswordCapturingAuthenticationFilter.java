@@ -1,10 +1,10 @@
 /* === PasswordCapturingAuthenticationFilter.java === */
 package ecampus.academy.project.security;
 
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 public class PasswordCapturingAuthenticationFilter extends UsernamePasswordAuthenticationFilter{
 

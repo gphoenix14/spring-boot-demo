@@ -81,7 +81,7 @@
                     <span th:if="${message.isBroadcast}" th:text="' -> tutti'"></span>
                     <span th:if="${!message.isBroadcast}" th:text="' -> ' + ${message.receiver.username}"></span>:
                     <!-- il testo rimane ma sarà sostituito da JS se criptato -->
-                    <span class="msg-body" th:text="${message.content}"></span>
+                    <span class="msg-body" th:utext="${message.content}"></span>
                 </p>
             </div>
         </div>

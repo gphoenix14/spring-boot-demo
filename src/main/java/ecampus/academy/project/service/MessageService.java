@@ -57,11 +57,12 @@ return messageRepository.save(message);
 }
 
 /* stream e query */
-public Page<Message> findAllRelevantMessages(String currentUsername,Pageable pageable){
-User current=userRepository.findByUsername(currentUsername)
-        .orElseThrow(() -> new IllegalArgumentException("Utente non trovato"));
-return messageRepository.findRelevantMessages(current.getId(),pageable);
+public Page<Message> findAllRelevantMessages(String currentUsername, Pageable pageable){
+    User current = userRepository.findByUsername(currentUsername)
+                    .orElseThrow(() -> new IllegalArgumentException("Utente non trovato"));
+    return messageRepository.findRelevantMessages(current.getId(), pageable);
 }
+
 
 public List<Message> findAllMessagesBetweenUsers(Long senderId,Long receiverId){
 return messageRepository.findAllMessagesBetweenUsers(senderId,receiverId);
