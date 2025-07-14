@@ -1,146 +1,175 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Messages</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f5f5f5;
-            margin: 0;
-            padding: 0;
-        }
-        .container {
-            max-width: 600px;
-            margin: 50px auto;
-            padding: 20px;
-            background-color: #fff;
-            border-radius: 5px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .message-form input[type="text"], .message-form select {
-            width: calc(100% - 20px);
-            padding: 10px;
-            margin-bottom: 10px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            box-sizing: border-box;
-        }
-        .message-form button[type="submit"] {
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 10px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        .message-container {
-            margin-top: 20px;
-        }
-        .message {
-            background-color: #f9f9f9;
-            padding: 10px;
-            margin-bottom: 10px;
-            border-radius: 5px;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Messages</title>
+
+<style>
+/* ===== LAYOUT PRINCIPALE ===== */
+body{font-family:Arial,Helvetica,sans-serif;background:#ece5dd;margin:0}
+.container{max-width:600px;margin:40px auto;background:#fff;border-radius:6px;
+           box-shadow:0 2px 8px rgba(0,0,0,.15);padding:20px}
+
+/* ===== TOP BAR ===== */
+.topbar{display:flex;justify-content:space-between;align-items:center;
+        background:#075e54;color:#fff;padding:10px 18px;border-radius:6px 6px 0 0;
+        margin:-20px -20px 20px -20px}
+.topbar h1{font-size:18px;margin:0;font-weight:600}
+.user-info{display:flex;align-items:center;gap:10px;font-size:15px}
+.user-info button,.logout-btn{background:#25d366;border:0;padding:6px 10px;border-radius:4px;
+                              color:#fff;cursor:pointer;font-size:13px}
+.user-info button:hover{background:#1eb05a}
+
+/* logout “rosso” */
+.logout-btn{background:#d32f2f}
+.logout-btn:hover{background:#b71c1c}
+
+/* ===== FORM / BUBBLES ===== */
+.message-form input[type=text],.message-form select{
+  width:100%;padding:10px;border:1px solid #ddd;border-radius:4px;margin-bottom:8px}
+.message-form button{width:100%;padding:10px;border:0;border-radius:4px;color:#fff;
+  background:#25d366;font-weight:bold;cursor:pointer;margin-bottom:6px}
+
+.message-container{margin-top:18px}
+.message{max-width:80%;padding:8px 12px;border-radius:8px;font-size:14px;
+         line-height:1.4;word-wrap:break-word;position:relative;margin:6px 0}
+.sent{background:#dcf8c6;margin-left:auto}
+.received{background:#fff}
+.broadcast{background:#ffe9a6}
+
+.msg-meta{display:block;font-size:11px;color:#555;margin-bottom:3px}
+.delete-btn{background:none;border:0;color:#888;cursor:pointer;font-size:14px;
+            position:absolute;top:4px;right:4px}
+.delete-btn:hover{color:#d11}
+
+/* ===== MODAL RSA ===== */
+#rsaModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);
+          backdrop-filter:blur(2px);z-index:999}
+.modal-box{background:#fafafa;width:90%;max-width:520px;margin:10% auto;
+           border-radius:6px;padding:18px 20px;box-shadow:0 4px 12px rgba(0,0,0,.25);}
+.modal-box h2{margin-top:0;font-size:18px;color:#075e54}
+.modal-box textarea{width:100%;height:200px;resize:vertical;border:1px solid #ccc;
+                    border-radius:4px;padding:8px;font-family:monospace;font-size:13px}
+.modal-box .close{background:#d32f2f;border:0;color:#fff;padding:6px 12px;
+                  border-radius:4px;cursor:pointer;margin-top:10px}
+.modal-box .close:hover{background:#b71c1c}
+</style>
 </head>
 <body>
-    <div class="container">
-        <h2>Messages</h2>
+<div class="container">
 
-        <!-- ======= FORM INVIO ======= -->
-        <div class="message-form">
-            <form th:action="@{/messages/send}" method="post">
-                <input type="text" name="content" placeholder="Write a message" />
-                <button type="submit" name="sendPrivate" value="false">Send Broadcast</button>
+  <!-- ===== TOP BAR ===== -->
+  <div class="topbar">
+    <h1>Ecampus – Progetto LdP</h1>
 
-                <select name="receiverUsername">
-                    <option value="">Select a user</option>
-                    <option th:each="user : ${users}"
-                            th:value="${user.username}"
-                            th:text="${user.username}">
-                    </option>
-                </select>
+    <div class="user-info">
+      <span th:text="${currentUser}">user</span>
 
-                <button type="submit" name="sendPrivate" value="true">Send Private</button>
-            </form>
-        </div>
+      <!-- LOGOUT -->
+      <form id="logoutForm" th:action="@{/logout}" method="post" style="display:inline;margin:0">
+        <button type="submit" class="logout-btn">Logout</button>
+      </form>
 
-        <!-- ======= LISTA MESSAGGI ======= -->
-        <div class="message-container">
-            <div th:each="message : ${messagePage.content}"
-                 class="message"
-                 th:attr="data-broadcast=${message.isBroadcast},data-ct=${message.content}">
-                <p>
-                    <span th:text="${#temporals.format(message.timestamp, 'dd/MM/yyyy HH:mm')}"></span>
-                    <span th:text="${message.sender.username}"></span>
-                    <span th:if="${message.isBroadcast}" th:text="' -> tutti'"></span>
-                    <span th:if="${!message.isBroadcast}" th:text="' -> ' + ${message.receiver.username}"></span>:
-                    <!-- il testo rimane ma sarà sostituito da JS se criptato -->
-                    <span class="msg-body" th:utext="${message.content}"></span>
-                </p>
-            </div>
-        </div>
-
-        <!-- ======= PAGINAZIONE ======= -->
-        <div>
-            <a th:if="${messagePage.hasPrevious()}"
-               th:href="@{/messages(page=${messagePage.number - 1}, size=${messagePage.size})}">
-               Precedente
-            </a>
-            <a th:if="${messagePage.hasNext()}"
-               th:href="@{/messages(page=${messagePage.number + 1}, size=${messagePage.size})}">
-               Successivo
-            </a>
-            | Visualizza:
-            <a th:href="@{/messages(page=0, size=5)}">5</a>
-            <a th:href="@{/messages(page=0, size=10)}">10</a>
-            <a th:href="@{/messages(page=0, size=20)}">20</a> messaggi per pagina
-        </div>
+      <button type="button" id="showKey">Show RSA</button>
     </div>
+  </div>
 
-    <!-- ======= SCRIPT DECRIPTAZIONE CLIENT ======= -->
+  <!-- ===== FORM INVIO ===== -->
+  <div class="message-form">
+    <form th:action="@{/messages/send}" method="post">
+      <input type="text" name="content" placeholder="Write a message">
+      <button type="submit" name="sendPrivate" value="false">Send Broadcast</button>
+
+      <select name="receiverUsername">
+        <option value="">Select a user</option>
+        <option th:each="u : ${users}" th:value="${u.username}" th:text="${u.username}"></option>
+      </select>
+
+      <button type="submit" name="sendPrivate" value="true">Send Private</button>
+    </form>
+  </div>
+
+  <!-- ===== LISTA MESSAGGI ===== -->
+  <div class="message-container">
+    <div th:each="m : ${messagePage.content}"
+         th:class="'message ' +
+                   (${m.sender.username} == ${currentUser} ? 'sent' : 'received') +
+                   (${m.isBroadcast} ? ' broadcast' : '')"
+         th:attr="data-broadcast=${m.isBroadcast},data-ct=${m.content}">
+
+      <form th:if="${m.sender.username} == ${currentUser}"
+            th:action="@{/messages/delete}" method="post" style="display:inline">
+        <input type="hidden" name="id" th:value="${m.id}">
+        <button class="delete-btn" title="Delete">🗑️</button>
+      </form>
+
+      <span class="msg-meta"
+            th:utext="${#temporals.format(m.timestamp,'dd/MM/yyyy HH:mm')} + ' ' +
+                     ${m.sender.username} +
+                     (${m.isBroadcast} ? ' → tutti' : (' → ' + ${m.receiver.username}))">
+      </span>
+      <span class="msg-body" th:text="${m.content}"></span>
+    </div>
+  </div>
+
+  <!-- ===== PAGINAZIONE ===== -->
+  <div style="margin-top:14px;font-size:14px">
+    <a th:if="${messagePage.hasPrevious()}"
+       th:href="@{/messages(page=${messagePage.number-1},size=${messagePage.size})}">« Prev</a>
+    <a th:if="${messagePage.hasNext()}"
+       th:href="@{/messages(page=${messagePage.number+1},size=${messagePage.size})}">Next »</a>
+  </div>
+</div>
+
+<!-- ===== MODAL STRUCTURE ===== -->
+<div id="rsaModal">
+  <div class="modal-box">
+    <h2>RSA Private Key</h2>
+    <textarea id="rsaTxt" readonly></textarea>
+    <button class="close" id="closeModal">Close</button>
+  </div>
+</div>
+
+<!-- ===== JS ===== -->
 <script>
-document.addEventListener('DOMContentLoaded', async () => {
+document.addEventListener('DOMContentLoaded',async()=>{
 
-    /* recupero chiave privata PKCS8 dal cookie */
-    const match = document.cookie.match(/(?:^|;\s*)rsaPriv=([^;]+)/);
-    if (!match) return;
+  /* ===== modal RSA ===== */
+  const modal=document.getElementById('rsaModal');
+  const txt  =document.getElementById('rsaTxt');
 
-    const pkcs8 = Uint8Array.from(atob(decodeURIComponent(match[1])),
-                                  c => c.charCodeAt(0));
+  document.getElementById('showKey').onclick=()=>{
+    const m=document.cookie.match(/(?:^|;\s*)rsaPriv=([^;]+)/);
+    if(!m){alert('No key in cookie');return;}
+    txt.value=decodeURIComponent(m[1]);
+    modal.style.display='block';
+  };
+  document.getElementById('closeModal').onclick=()=>modal.style.display='none';
+  modal.onclick=e=>{if(e.target===modal)modal.style.display='none';};
 
-    /* ✱ algoritmo completo con hash = SHA‑256 ✱ */
-    const algo = { name: 'RSA-OAEP', hash: 'SHA-256' };
+  /* ===== logout: cancella cookie rsaPriv ===== */
+  document.getElementById('logoutForm').addEventListener('submit',()=>{
+    document.cookie='rsaPriv=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
+  });
 
-    /* importo la chiave privata */
-    const privateKey = await crypto.subtle.importKey(
-        'pkcs8',
-        pkcs8,
-        algo,
-        false,
-        ['decrypt']
-    );
+  /* ===== decrypt PM ===== */
+  const ck=document.cookie.match(/(?:^|;\s*)rsaPriv=([^;]+)/); if(!ck) return;
+  const pkcs8=Uint8Array.from(atob(decodeURIComponent(ck[1])),c=>c.charCodeAt(0));
+  const algo={name:'RSA-OAEP',hash:'SHA-256'};
+  const priv=await crypto.subtle.importKey('pkcs8',pkcs8,algo,false,['decrypt']);
 
-    /* tenta la decrittazione di ogni messaggio privato */
-    document.querySelectorAll('.message').forEach(async div => {
-        if (div.dataset.broadcast === 'true') return;  // broadcast già in chiaro
-
-        try {
-            const ct = Uint8Array.from(atob(div.dataset.ct), c=>c.charCodeAt(0));
-            const pt = await crypto.subtle.decrypt(algo, privateKey, ct);
-            div.querySelector('.msg-body').textContent =
-                new TextDecoder().decode(pt);
-        } catch {
-            div.querySelector('.msg-body').textContent = '[DECRYPT ERROR]';
-        }
-    });
+  document.querySelectorAll('.message').forEach(async d=>{
+    if(d.dataset.broadcast==='true')return;
+    try{
+      const ct=Uint8Array.from(atob(d.dataset.ct),c=>c.charCodeAt(0));
+      const pt=await crypto.subtle.decrypt(algo,priv,ct);
+      d.querySelector('.msg-body').textContent=new TextDecoder().decode(pt);
+    }catch{
+      d.querySelector('.msg-body').textContent='[DECRYPT ERROR]';
+    }
+  });
 });
 </script>
-
 </body>
 </html>

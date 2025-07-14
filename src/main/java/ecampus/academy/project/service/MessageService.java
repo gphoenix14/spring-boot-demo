@@ -72,4 +72,13 @@ public List<Message> findAll(){return messageRepository.findAll();}
 
 public void addEmitter(SseEmitter e){emitters.add(e);}
 public void removeEmitter(SseEmitter e){emitters.remove(e);}
+  public void delete(Long messageId, String currentUsername) {
+        Message m = messageRepository.findById(messageId)
+                .orElseThrow(() -> new IllegalArgumentException("Messaggio non trovato"));
+
+        if (!m.getSender().getUsername().equals(currentUsername)) {
+            throw new IllegalStateException("Non puoi cancellare messaggi altrui!");
+        }
+        messageRepository.delete(m);
+    }
 }

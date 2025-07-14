@@ -1,68 +1,45 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f5f5f5;
-        }
-        .login-container {
-            max-width: 400px;
-            margin: 50px auto;
-            padding: 20px;
-            background-color: #fff;
-            border-radius: 5px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            text-align: center;
-        }
-        input[type="text"],
-        input[type="password"] {
-            width: 100%;
-            padding: 10px;
-            margin: 10px 0;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            box-sizing: border-box;
-        }
-        button[type="submit"],
-        .register-btn {
-            width: 100%;
-            padding: 10px;
-            margin-top: 10px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            color: white;
-            box-sizing: border-box;
-        }
-        button[type="submit"] {
-            background-color: #4CAF50;
-        }
-        button[type="submit"]:hover {
-            background-color: #45a049;
-        }
-        .register-btn {
-            background-color: #008CBA;
-            text-decoration: none;
-            display: inline-block;
-        }
-        .register-btn:hover {
-            background-color: #007bb5;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login</title>
+
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;background:#f5f5f5}
+    .login-container{max-width:400px;margin:50px auto;padding:20px;background:#fff;
+                     border-radius:5px;box-shadow:0 2px 4px rgba(0,0,0,.1);text-align:center}
+    input[type=text],input[type=password]{width:100%;padding:10px;margin:10px 0;border:1px solid #ccc;
+                     border-radius:5px;box-sizing:border-box}
+    button[type=submit],.register-btn{width:100%;padding:10px;margin-top:10px;border:none;border-radius:5px;
+                     cursor:pointer;color:#fff;box-sizing:border-box}
+    button[type=submit]{background:#4CAF50} button[type=submit]:hover{background:#45a049}
+    .register-btn{background:#008CBA;text-decoration:none;display:inline-block}
+    .register-btn:hover{background:#007bb5}
+    .err{color:#c00;margin-bottom:10px}
+  </style>
 </head>
+
 <body>
-    <div class="login-container">
-        <h2>Login</h2>
-        <form th:action="@{/login}" method="post">
-            <input type="text" name="username" placeholder="Username" />
-            <input type="password" name="password" placeholder="Password" />
-            <button type="submit">Login</button>
-        </form>
-        <a th:href="@{/register}" class="register-btn">Registrati</a>
-    </div>
+<div class="login-container">
+  <h2>Login</h2>
+
+  <!-- credenziali errate -->
+  <div th:if="${loginError}" class="err">Credenziali non valide</div>
+
+  <!-- account bloccato -->
+  <div th:if="${accountLocked}" class="err">
+      Account bloccato. Potrai riprovare il&nbsp;
+      <span th:text="${#temporals.format(lockUntil, 'dd/MM/yyyy HH:mm')}"></span>
+  </div>
+
+  <form th:action="@{/login}" method="post">
+    <input type="text"     name="username" placeholder="Username"/>
+    <input type="password" name="password" placeholder="Password"/>
+    <button type="submit">Login</button>
+  </form>
+
+  <a th:href="@{/register}" class="register-btn">Registrati</a>
+</div>
 </body>
 </html>

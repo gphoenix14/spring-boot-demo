@@ -28,18 +28,19 @@ public class MessageController {
 
 
     @GetMapping("/messages")
-    public String viewMessages(Model model, 
-                               @RequestParam(defaultValue = "0") int page, 
+    public String viewMessages(Model model,
+                               @RequestParam(defaultValue = "0") int page,
                                @RequestParam(defaultValue = "10") int size) {
-        org.springframework.security.core.Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        String currentUsername = authentication.getName();
-        
-        // Crea l'oggetto Pageable con ordinamento discendente basato sul timestamp
+
+        String currentUsername =
+            SecurityContextHolder.getContext().getAuthentication().getName();
+
         Pageable pageable = PageRequest.of(page, size, Sort.by("timestamp").descending());
         Page<Message> messagePage = messageService.findAllRelevantMessages(currentUsername, pageable);
-        
+
         model.addAttribute("messagePage", messagePage);
         model.addAttribute("users", userRepository.findAll());
+        model.addAttribute("currentUser", currentUsername);          // ⬅️ serve nel template
         return "messages";
     }
 
@@ -64,6 +65,15 @@ public class MessageController {
         boolean isBroadcast = !sendPrivate;
         
         messageService.save(message, username, isBroadcast, receiverUsername);
+        return "redirect:/messages";
+    }
+
+    @PostMapping("/messages/delete")
+    public String deleteMessage(@RequestParam("id") Long id) {
+        String currentUsername =
+            SecurityContextHolder.getContext().getAuthentication().getName();
+
+        messageService.delete(id, currentUsername);
         return "redirect:/messages";
     }
 }
