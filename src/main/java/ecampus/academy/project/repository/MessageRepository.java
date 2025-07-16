@@ -22,13 +22,13 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
 
     List<Message> findAllBySenderIdAndReceiverId(Long senderId, Long receiverId);
 
-    /* ▼ nuovo criterio: niente più “ m.sender.id = ?1 ” semplice */
+    /* Messaggi visibili all'utente loggato (broadcast + mittente + destinatario) */
     @Query("""
            SELECT m
            FROM   Message m
            WHERE  m.isBroadcast = true
-               OR m.receiver.id   = ?1
-               OR (m.sender.id    = ?1 AND m.receiver.id = ?1)
+              OR  m.sender.id   = ?1
+              OR  m.receiver.id = ?1
            ORDER  BY m.timestamp DESC
            """)
     Page<Message> findRelevantMessages(Long userId, Pageable pageable);

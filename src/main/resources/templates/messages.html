@@ -221,12 +221,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   /* ===================== DECRYPT MESSAGGI =========================== */
-  function partnerFromDiv(div){
-    const s = div.dataset.sender;
-    const r = div.dataset.receiver;
-    if (!r) return null;              // broadcast
-    return (s === currentUser) ? r : s;
-  }
+function partnerFromDiv(div){
+  const s = div.dataset.sender;
+  const r = div.dataset.receiver;
+  if (!r) return null;              // broadcast
+  return (s === currentUser) ? r : s;
+}
 
   async function decryptDiv(div) {
     if (div.dataset.broadcast === 'true') return;
