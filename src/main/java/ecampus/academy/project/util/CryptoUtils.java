@@ -19,7 +19,9 @@ import java.security.spec.InvalidKeySpecException;
 import java.security.spec.KeySpec;
 import java.security.spec.MGF1ParameterSpec;
 import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.RSAPublicKeySpec;
 import java.security.spec.X509EncodedKeySpec;
+import java.util.Arrays;
 import java.util.Base64;
 
 import javax.crypto.BadPaddingException;
@@ -28,189 +30,304 @@ import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.OAEPParameterSpec;
 import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.PSource;
 import javax.crypto.spec.SecretKeySpec;
 
+/**
+ * Raccolta di utility crittografiche usate dal progetto.
+ * 
+ * Contiene:
+ *  • Generazione / codifica chiavi RSA
+ *  • Cifratura/decifratura chiave privata con password (AES‑CBC + PBKDF2)
+ *  • Helper generici (token dinamico, AES stringa)
+ *  • RSA‑OAEP cifratura messaggi brevi / chat‑key
+ *  • AES‑GCM cifratura messaggi chat (chat‑key simmetrica)
+ */
 public final class CryptoUtils {
 
-private CryptoUtils(){}
+    private CryptoUtils() {}
 
-public static KeyPair generateRsaKeyPair(){
-try{
-KeyPairGenerator kpg=KeyPairGenerator.getInstance("RSA");
-kpg.initialize(2048,SecureRandom.getInstanceStrong());
-return kpg.generateKeyPair();
-}catch(GeneralSecurityException e){
-throw new IllegalStateException("RSA key generation failed",e);
-}
-}
+    /* ------------------------------------------------------------------ */
+    /* ================= RSA helper & SSH pub‑key encoding =============== */
+    /* ------------------------------------------------------------------ */
 
-public static String encodePublicKeySsh(PublicKey publicKey){
-try{
-java.security.interfaces.RSAPublicKey rsa=(java.security.interfaces.RSAPublicKey)publicKey;
-ByteArrayOutputStream buf=new ByteArrayOutputStream();
-writeSshString(buf,"ssh-rsa".getBytes(StandardCharsets.US_ASCII));
-writeSshMpInt(buf,rsa.getPublicExponent());
-writeSshMpInt(buf,rsa.getModulus());
-String b64=Base64.getEncoder().encodeToString(buf.toByteArray());
-return "ssh-rsa "+b64;
-}catch(Exception e){
-throw new IllegalStateException("Encoding SSH key failed",e);
-}
-}
+    public static KeyPair generateRsaKeyPair() {
+        try {
+            KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
+            kpg.initialize(2048, SecureRandom.getInstanceStrong());
+            return kpg.generateKeyPair();
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("RSA key generation failed", e);
+        }
+    }
 
-private static void writeSshString(ByteArrayOutputStream buf,byte[] data)throws Exception{
-int len=data.length;
-buf.write((len>>>24)&0xFF);
-buf.write((len>>>16)&0xFF);
-buf.write((len>>>8)&0xFF);
-buf.write(len&0xFF);
-buf.write(data);
-}
+    public static String encodePublicKeySsh(PublicKey publicKey) {
+        try {
+            java.security.interfaces.RSAPublicKey rsa =
+                    (java.security.interfaces.RSAPublicKey) publicKey;
+            ByteArrayOutputStream buf = new ByteArrayOutputStream();
+            writeSshString(buf, "ssh-rsa".getBytes(StandardCharsets.US_ASCII));
+            writeSshMpInt(buf, rsa.getPublicExponent());
+            writeSshMpInt(buf, rsa.getModulus());
+            String b64 = Base64.getEncoder().encodeToString(buf.toByteArray());
+            return "ssh-rsa " + b64;
+        } catch (Exception e) {
+            throw new IllegalStateException("Encoding SSH key failed", e);
+        }
+    }
 
-private static void writeSshMpInt(ByteArrayOutputStream buf,BigInteger i)throws Exception{
-byte[] data=i.toByteArray();
-writeSshString(buf,data);
-}
+    private static void writeSshString(ByteArrayOutputStream buf, byte[] data) throws Exception {
+        int len = data.length;
+        buf.write((len >>> 24) & 0xFF);
+        buf.write((len >>> 16) & 0xFF);
+        buf.write((len >>> 8)  & 0xFF);
+        buf.write(len & 0xFF);
+        buf.write(data);
+    }
 
-public static String encryptPrivateKey(char[] password,PrivateKey privateKey){
-try{
-byte[] salt=new byte[16];
-SecureRandom.getInstanceStrong().nextBytes(salt);
-SecretKeyFactory skf=SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
-KeySpec spec=new PBEKeySpec(password,salt,100_000,256);
-SecretKey tmp=skf.generateSecret(spec);
-SecretKey secret=new SecretKeySpec(tmp.getEncoded(),"AES");
-byte[] iv=new byte[16];
-SecureRandom.getInstanceStrong().nextBytes(iv);
-Cipher cipher=Cipher.getInstance("AES/CBC/PKCS5Padding");
-cipher.init(Cipher.ENCRYPT_MODE,secret,new IvParameterSpec(iv));
-byte[] cipherText=cipher.doFinal(privateKey.getEncoded());
-byte[] combo=concat(salt,iv,cipherText);
-return Base64.getEncoder().encodeToString(combo);
-}catch(GeneralSecurityException e){
-throw new IllegalStateException("Encrypting private key failed",e);
-}
-}
+    private static void writeSshMpInt(ByteArrayOutputStream buf, BigInteger i) throws Exception {
+        writeSshString(buf, i.toByteArray());
+    }
 
-public static String encryptStringAES(String plaintext,char[] password){
-try{
-byte[] salt=new byte[16];
-SecureRandom.getInstanceStrong().nextBytes(salt);
-SecretKeyFactory skf=SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
-KeySpec spec=new PBEKeySpec(password,salt,100_000,256);
-SecretKey tmp=skf.generateSecret(spec);
-SecretKey secret=new SecretKeySpec(tmp.getEncoded(),"AES");
-byte[] iv=new byte[16];
-SecureRandom.getInstanceStrong().nextBytes(iv);
-Cipher cipher=Cipher.getInstance("AES/CBC/PKCS5Padding");
-cipher.init(Cipher.ENCRYPT_MODE,secret,new IvParameterSpec(iv));
-byte[] cipherText=cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
-byte[] combo=concat(salt,iv,cipherText);
-return Base64.getEncoder().encodeToString(combo);
-}catch(GeneralSecurityException e){
-throw new IllegalStateException("AES encryption failed",e);
-}
-}
+    /* ------------------------------------------------------------------ */
+    /* =============== AES‑CBC private‑key encryption utils ============== */
+    /* ------------------------------------------------------------------ */
 
-private static byte[] concat(byte[]...parts){
-int len=0;
-for(byte[] p:parts)len+=p.length;
-byte[] out=new byte[len];
-int pos=0;
-for(byte[] p:parts){
-System.arraycopy(p,0,out,pos,p.length);
-pos+=p.length;
-}
-return out;
-}
+    /** Cifra una chiave privata PKCS8 con password (PBKDF2‑HmacSHA256 + AES‑CBC). */
+    public static String encryptPrivateKey(char[] password, PrivateKey privateKey) {
+        try {
+            byte[] salt = new byte[16];
+            SecureRandom.getInstanceStrong().nextBytes(salt);
 
-public static String generateDynamicToken(String username){
-try{
-MessageDigest md=MessageDigest.getInstance("SHA-256");
-String material=username.substring(0,Math.min(3,username.length()))+username.length()+username.charAt(username.length()-1);
-byte[] digest=md.digest(material.getBytes());
-return Base64.getUrlEncoder().withoutPadding().encodeToString(digest).substring(0,12);
-}catch(NoSuchAlgorithmException e){
-throw new IllegalStateException(e);
-}
-}
-public static PrivateKey decryptPrivateKey(char[] password,String encB64){
-try{
-byte[] combo=Base64.getDecoder().decode(encB64);
-ByteBuffer buf=ByteBuffer.wrap(combo);
-byte[] salt=new byte[16];buf.get(salt);
-byte[] iv=new byte[16];buf.get(iv);
-byte[] cipherText=new byte[buf.remaining()];buf.get(cipherText);
+            SecretKeyFactory skf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+            KeySpec spec = new PBEKeySpec(password, salt, 100_000, 256);
+            SecretKey tmp = skf.generateSecret(spec);
+            SecretKey secret = new SecretKeySpec(tmp.getEncoded(), "AES");
 
-SecretKeyFactory skf=SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
-KeySpec spec=new PBEKeySpec(password,salt,100_000,256);
-SecretKey tmp=skf.generateSecret(spec);
-SecretKey secret=new SecretKeySpec(tmp.getEncoded(),"AES");
+            byte[] iv = new byte[16];
+            SecureRandom.getInstanceStrong().nextBytes(iv);
 
-Cipher cipher=Cipher.getInstance("AES/CBC/PKCS5Padding");
-cipher.init(Cipher.DECRYPT_MODE,secret,new IvParameterSpec(iv));
-byte[] pkcs8=cipher.doFinal(cipherText);
+            Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+            cipher.init(Cipher.ENCRYPT_MODE, secret, new IvParameterSpec(iv));
+            byte[] cipherText = cipher.doFinal(privateKey.getEncoded());
 
-KeyFactory kf=KeyFactory.getInstance("RSA");
-return kf.generatePrivate(new PKCS8EncodedKeySpec(pkcs8));
-}catch(InvalidAlgorithmParameterException | InvalidKeyException | NoSuchAlgorithmException | InvalidKeySpecException | BadPaddingException | IllegalBlockSizeException | NoSuchPaddingException e){
-throw new IllegalArgumentException("Password errata o chiave corrotta",e);
-}
-}
+            byte[] combo = concat(salt, iv, cipherText);
+            return Base64.getEncoder().encodeToString(combo);
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("Encrypting private key failed", e);
+        }
+    }
 
-/* sostituisci l’intero metodo rsaEncrypt e aggiungi parseSshRsa() */
+    /** Cifra una stringa con password (stessa logica di {@link #encryptPrivateKey}). */
+    public static String encryptStringAES(String plaintext, char[] password) {
+        try {
+            byte[] salt = new byte[16];
+            SecureRandom.getInstanceStrong().nextBytes(salt);
 
-public static String rsaEncrypt(String plaintext, String keyString){
-    try{
+            SecretKeyFactory skf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+            KeySpec spec = new PBEKeySpec(password, salt, 100_000, 256);
+            SecretKey tmp = skf.generateSecret(spec);
+            SecretKey secret = new SecretKeySpec(tmp.getEncoded(), "AES");
+
+            byte[] iv = new byte[16];
+            SecureRandom.getInstanceStrong().nextBytes(iv);
+
+            Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+            cipher.init(Cipher.ENCRYPT_MODE, secret, new IvParameterSpec(iv));
+            byte[] cipherText = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
+
+            byte[] combo = concat(salt, iv, cipherText);
+            return Base64.getEncoder().encodeToString(combo);
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("AES encryption failed", e);
+        }
+    }
+
+    /**
+     * Decifra la chiave privata precedentemente cifrata con {@link #encryptPrivateKey}.
+     * Lancia IllegalArgumentException se password errata / dati corrotti.
+     */
+    public static PrivateKey decryptPrivateKey(char[] password, String encB64) {
+        try {
+            byte[] combo = Base64.getDecoder().decode(encB64);
+            ByteBuffer buf = ByteBuffer.wrap(combo);
+            byte[] salt = new byte[16]; buf.get(salt);
+            byte[] iv   = new byte[16]; buf.get(iv);
+            byte[] cipherText = new byte[buf.remaining()]; buf.get(cipherText);
+
+            SecretKeyFactory skf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+            KeySpec spec = new PBEKeySpec(password, salt, 100_000, 256);
+            SecretKey tmp = skf.generateSecret(spec);
+            SecretKey secret = new SecretKeySpec(tmp.getEncoded(), "AES");
+
+            Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+            cipher.init(Cipher.DECRYPT_MODE, secret, new IvParameterSpec(iv));
+            byte[] pkcs8 = cipher.doFinal(cipherText);
+
+            KeyFactory kf = KeyFactory.getInstance("RSA");
+            return kf.generatePrivate(new PKCS8EncodedKeySpec(pkcs8));
+        } catch (InvalidAlgorithmParameterException | InvalidKeyException |
+                 NoSuchAlgorithmException | InvalidKeySpecException |
+                 BadPaddingException | IllegalBlockSizeException | NoSuchPaddingException e) {
+            throw new IllegalArgumentException("Password errata o chiave corrotta", e);
+        }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* ================== Helper token random (non critico) ============== */
+    /* ------------------------------------------------------------------ */
+
+    public static String generateDynamicToken(String username) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            String material = username.substring(0, Math.min(3, username.length()))
+                             + username.length()
+                             + username.charAt(username.length() - 1);
+            byte[] digest = md.digest(material.getBytes());
+            return Base64.getUrlEncoder().withoutPadding()
+                         .encodeToString(digest).substring(0, 12);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* ===================  RSA encrypt / decrypt helper  ================= */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Cifra una piccola stringa con RSA‑OAEP(SHA‑256). Accetta chiavi in formato
+     * SSH public key ("ssh-rsa AAAA...") oppure Base64 X.509.
+     */
+    public static String rsaEncrypt(String plaintext, String keyString) {
+        try {
+            PublicKey pub = keyString.startsWith("ssh-rsa ")
+                    ? parseSshRsa(keyString)
+                    : KeyFactory.getInstance("RSA")
+                                .generatePublic(new X509EncodedKeySpec(
+                                        Base64.getDecoder().decode(keyString)));
+
+            OAEPParameterSpec oaep256 = new OAEPParameterSpec(
+                    "SHA-256",
+                    "MGF1",
+                    MGF1ParameterSpec.SHA256,
+                    PSource.PSpecified.DEFAULT);
+
+            Cipher c = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding");
+            c.init(Cipher.ENCRYPT_MODE, pub, oaep256);
+
+            byte[] ct = c.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
+            return Base64.getEncoder().encodeToString(ct);
+
+        } catch (Exception e) {
+            throw new IllegalStateException("RSA encrypt failed", e);
+        }
+    }
+
+    /* converte “ssh-rsa AAAA...” in RSAPublicKey */
+    private static PublicKey parseSshRsa(String ssh) throws Exception {
+        String b64 = ssh.trim().split("\\s+")[1];   // scarta prefisso e commento
+        byte[] data = Base64.getDecoder().decode(b64);
+        ByteBuffer buf = ByteBuffer.wrap(data);
+
+        int len = buf.getInt(); byte[] type = new byte[len]; buf.get(type);
+        if (!"ssh-rsa".equals(new String(type, StandardCharsets.US_ASCII)))
+            throw new IllegalArgumentException("Not an ssh-rsa key");
+
+        BigInteger e = readMpInt(buf);
+        BigInteger n = readMpInt(buf);
+
+        return KeyFactory.getInstance("RSA")
+                .generatePublic(new RSAPublicKeySpec(n, e));
+    }
+
+    private static BigInteger readMpInt(ByteBuffer buf) {
+        int len = buf.getInt();
+        byte[] val = new byte[len]; buf.get(val);
+        return new BigInteger(val);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* =====================  AES‑GCM (chat‑key) utils  =================== */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Cifra un testo in UTF‑8 con AES‑GCM 256 bit.
+     * Restituisce Base64 URL‑safe (senza padding).
+     */
+    public static String aesGcmEncrypt(String plaintext, byte[] key) {
+        try {
+            byte[] iv = new byte[12];
+            SecureRandom.getInstanceStrong().nextBytes(iv);
+
+            Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
+            c.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(key, "AES"),
+                                      new GCMParameterSpec(128, iv));
+            byte[] ct = c.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
+
+            return Base64.getUrlEncoder().withoutPadding()
+                         .encodeToString(concat(iv, ct));
+        } catch (Exception e) {
+            throw new IllegalStateException("AES‑GCM encrypt failed", e);
+        }
+    }
+
+    /**
+     * Decifra una stringa prodotta da {@link #aesGcmEncrypt}.
+     * Se la decifratura fallisce, restituisce la stringa "[DECRYPT ERROR]".
+     */
+    public static String aesGcmDecrypt(String cipherB64, byte[] key) {
+        try {
+            byte[] all = Base64.getUrlDecoder().decode(cipherB64);
+            byte[] iv  = Arrays.copyOfRange(all, 0, 12);
+            byte[] ct  = Arrays.copyOfRange(all, 12, all.length);
+
+            Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
+            c.init(Cipher.DECRYPT_MODE, new SecretKeySpec(key, "AES"),
+                                      new GCMParameterSpec(128, iv));
+            return new String(c.doFinal(ct), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return "[DECRYPT ERROR]";
+        }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* ==========================  misc helper  ========================== */
+    /* ------------------------------------------------------------------ */
+
+    private static byte[] concat(byte[]... parts) {
+        int len = 0;
+        for (byte[] p : parts) len += p.length;
+        byte[] out = new byte[len];
+        int pos = 0;
+        for (byte[] p : parts) {
+            System.arraycopy(p, 0, out, pos, p.length);
+            pos += p.length;
+        }
+        return out;
+    }
+
+    public static String rsaEncryptBytes(byte[] data, String keyString) {
+    try {
         PublicKey pub = keyString.startsWith("ssh-rsa ")
                 ? parseSshRsa(keyString)
                 : KeyFactory.getInstance("RSA")
-                    .generatePublic(new X509EncodedKeySpec(Base64.getDecoder().decode(keyString)));
+                            .generatePublic(new X509EncodedKeySpec(Base64.getDecoder().decode(keyString)));
 
-        /* OAEP completamente esplicitato: digest SHA‑256 e MGF1 SHA‑256 */
         OAEPParameterSpec oaep256 = new OAEPParameterSpec(
-                "SHA-256",
-                "MGF1",
-                MGF1ParameterSpec.SHA256,
+                "SHA-256", "MGF1", MGF1ParameterSpec.SHA256,
                 PSource.PSpecified.DEFAULT);
 
         Cipher c = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding");
         c.init(Cipher.ENCRYPT_MODE, pub, oaep256);
-
-        byte[] ct = c.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
+        byte[] ct = c.doFinal(data);
         return Base64.getEncoder().encodeToString(ct);
-
-    }catch(Exception e){
+    } catch (Exception e) {
         throw new IllegalStateException("RSA encrypt failed", e);
     }
 }
-
-/* converte “ssh-rsa AAAA...” in RSAPublicKey */
-private static PublicKey parseSshRsa(String ssh) throws Exception{
-    String b64 = ssh.trim().split("\\s+")[1];          // scarta prefisso e commento
-    byte[] data = Base64.getDecoder().decode(b64);
-    ByteBuffer buf = ByteBuffer.wrap(data);
-
-    int len = buf.getInt(); byte[] type=new byte[len]; buf.get(type);
-    if(!"ssh-rsa".equals(new String(type,StandardCharsets.US_ASCII)))
-        throw new IllegalArgumentException("Not an ssh-rsa key");
-
-    BigInteger e = readMpInt(buf);
-    BigInteger n = readMpInt(buf);
-
-    return KeyFactory.getInstance("RSA")
-            .generatePublic(new java.security.spec.RSAPublicKeySpec(n,e));
-}
-private static BigInteger readMpInt(ByteBuffer buf){
-    int len = buf.getInt();
-    byte[] val = new byte[len]; buf.get(val);
-    return new BigInteger(val);
-}
-
-
-
 }

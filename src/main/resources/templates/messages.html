@@ -64,7 +64,7 @@ body{font-family:Arial,Helvetica,sans-serif;background:#ece5dd;margin:0}
     <h1>Ecampus – Progetto LdP</h1>
 
     <div class="user-info">
-      <span th:text="${currentUser}">user</span>
+      <span id="currentUser" th:text="${currentUser}">user</span>
 
       <!-- LOGOUT -->
       <form id="logoutForm" th:action="@{/logout}" method="post" style="display:inline;margin:0">
@@ -77,16 +77,16 @@ body{font-family:Arial,Helvetica,sans-serif;background:#ece5dd;margin:0}
 
   <!-- ===== FORM INVIO ===== -->
   <div class="message-form">
-    <form th:action="@{/messages/send}" method="post">
-      <input type="text" name="content" placeholder="Write a message">
-      <button type="submit" name="sendPrivate" value="false">Send Broadcast</button>
+    <form id="sendMsgForm" th:action="@{/messages/send}" method="post">
+      <input id="msgContent" type="text" name="content" placeholder="Write a message">
+      <button id="sendBroadcastBtn" type="submit" name="sendPrivate" value="false">Send Broadcast</button>
 
-      <select name="receiverUsername">
+      <select id="receiverSelect" name="receiverUsername">
         <option value="">Select a user</option>
         <option th:each="u : ${users}" th:value="${u.username}" th:text="${u.username}"></option>
       </select>
 
-      <button type="submit" name="sendPrivate" value="true">Send Private</button>
+      <button id="sendPrivateBtn" type="submit" name="sendPrivate" value="true">Send Private</button>
     </form>
   </div>
 
@@ -96,8 +96,10 @@ body{font-family:Arial,Helvetica,sans-serif;background:#ece5dd;margin:0}
          th:class="'message ' +
                    (${m.sender.username} == ${currentUser} ? 'sent' : 'received') +
                    (${m.isBroadcast} ? ' broadcast' : '')"
-         th:attr="data-broadcast=${m.isBroadcast},data-ct=${m.content}">
-
+         th:attr="data-broadcast=${m.isBroadcast},
+                  data-ct=${m.content},
+                  data-sender=${m.sender.username},
+                  data-receiver=${m.receiver != null ? m.receiver.username : ''}">
       <form th:if="${m.sender.username} == ${currentUser}"
             th:action="@{/messages/delete}" method="post" style="display:inline">
         <input type="hidden" name="id" th:value="${m.id}">
@@ -133,43 +135,174 @@ body{font-family:Arial,Helvetica,sans-serif;background:#ece5dd;margin:0}
 
 <!-- ===== JS ===== -->
 <script>
-document.addEventListener('DOMContentLoaded',async()=>{
+document.addEventListener('DOMContentLoaded', async () => {
+
+  const currentUser = document.getElementById('currentUser').textContent.trim();
 
   /* ===== modal RSA ===== */
-  const modal=document.getElementById('rsaModal');
-  const txt  =document.getElementById('rsaTxt');
-
-  document.getElementById('showKey').onclick=()=>{
-    const m=document.cookie.match(/(?:^|;\s*)rsaPriv=([^;]+)/);
-    if(!m){alert('No key in cookie');return;}
-    txt.value=decodeURIComponent(m[1]);
-    modal.style.display='block';
+  const modal  = document.getElementById('rsaModal');
+  const rsaTxt = document.getElementById('rsaTxt');
+  document.getElementById('showKey').onclick = () => {
+    const m = document.cookie.match(/(?:^|;\s*)rsaPriv=([^;]+)/);
+    if (!m) { alert('No key in cookie'); return; }
+    rsaTxt.value = decodeURIComponent(m[1]);
+    modal.style.display = 'block';
   };
-  document.getElementById('closeModal').onclick=()=>modal.style.display='none';
-  modal.onclick=e=>{if(e.target===modal)modal.style.display='none';};
+  document.getElementById('closeModal').onclick = () => modal.style.display = 'none';
+  modal.onclick = e => { if (e.target === modal) modal.style.display = 'none'; };
 
-  /* ===== logout: cancella cookie rsaPriv ===== */
-  document.getElementById('logoutForm').addEventListener('submit',()=>{
-    document.cookie='rsaPriv=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
+  /* ===== logout: clear rsaPriv & chatKey_* ===== */
+  document.getElementById('logoutForm').addEventListener('submit', () => {
+    document.cookie = 'rsaPriv=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    document.cookie.split(';').forEach(c=>{
+      const [n] = c.trim().split('=');
+      if(n.startsWith('chatKey_')){
+        document.cookie = n+'=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
+      }
+    });
   });
 
-  /* ===== decrypt PM ===== */
-  const ck=document.cookie.match(/(?:^|;\s*)rsaPriv=([^;]+)/); if(!ck) return;
-  const pkcs8=Uint8Array.from(atob(decodeURIComponent(ck[1])),c=>c.charCodeAt(0));
-  const algo={name:'RSA-OAEP',hash:'SHA-256'};
-  const priv=await crypto.subtle.importKey('pkcs8',pkcs8,algo,false,['decrypt']);
+  /* ====================== CHAT‑KEY CACHE ============================ */
+  const aesCache = new Map();   // partner -> Uint8Array(32)
 
-  document.querySelectorAll('.message').forEach(async d=>{
-    if(d.dataset.broadcast==='true')return;
-    try{
-      const ct=Uint8Array.from(atob(d.dataset.ct),c=>c.charCodeAt(0));
-      const pt=await crypto.subtle.decrypt(algo,priv,ct);
-      d.querySelector('.msg-body').textContent=new TextDecoder().decode(pt);
-    }catch{
-      d.querySelector('.msg-body').textContent='[DECRYPT ERROR]';
+  function b64ToBytes(b64) {
+    const bin = atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for (let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
+    return arr;
+  }
+  function bytesToUrlB64(u8) {
+    let bin = '';
+    for (let i=0;i<u8.length;i++) bin += String.fromCharCode(u8[i]);
+    return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  }
+  function urlB64ToStd(b64url) {
+    let s = b64url.replace(/-/g,'+').replace(/_/g,'/');
+    while (s.length % 4) s += '=';
+    return s;
+  }
+
+  async function getRsaPrivKey() {
+    const m = document.cookie.match(/(?:^|;\s*)rsaPriv=([^;]+)/);
+    if (!m) throw new Error('rsaPriv cookie missing');
+    const pkcs8 = b64ToBytes(decodeURIComponent(m[1]));
+    const algo = {name:'RSA-OAEP',hash:'SHA-256'};
+    return crypto.subtle.importKey('pkcs8', pkcs8, algo, false, ['decrypt']);
+  }
+
+  function loadAesFromCookie(partner) {
+    const re = new RegExp('(?:^|;\\s*)chatKey_'+encodeURIComponent(partner)+'=([^;]+)');
+    const m = document.cookie.match(re);
+    if (!m) return null;
+    const rawArr = b64ToBytes(urlB64ToStd(m[1]));
+    aesCache.set(partner, rawArr);
+    return rawArr;
+  }
+
+  async function getAesKey(partner) {
+    if (aesCache.has(partner)) return aesCache.get(partner);
+    const fromCookie = loadAesFromCookie(partner);
+    if (fromCookie) return fromCookie;
+
+    console.debug('[chat-key] fetch for', partner);
+    // server CREA se manca
+    const resp = await fetch('/chat-key?partner='+encodeURIComponent(partner));
+    if (!resp.ok) throw new Error('chat-key fetch failed: '+resp.status);
+    const encKeyB64 = await resp.text(); // RSA‑encrypted AES
+
+    const priv = await getRsaPrivKey();
+    const raw  = await crypto.subtle.decrypt({name:'RSA-OAEP'}, priv, b64ToBytes(encKeyB64));
+    const rawArr = new Uint8Array(raw);
+    aesCache.set(partner, rawArr);
+
+    // cache in cookie (url‑safe)
+    document.cookie = 'chatKey_'+encodeURIComponent(partner)+'='+bytesToUrlB64(rawArr)+'; Path=/; Max-Age=3600';
+    return rawArr;
+  }
+
+  /* ===================== DECRYPT MESSAGGI =========================== */
+  function partnerFromDiv(div){
+    const s = div.dataset.sender;
+    const r = div.dataset.receiver;
+    if (!r) return null;              // broadcast
+    return (s === currentUser) ? r : s;
+  }
+
+  async function decryptDiv(div) {
+    if (div.dataset.broadcast === 'true') return;
+    const partner = partnerFromDiv(div);
+    if (!partner) return;
+
+    try {
+      const key = await getAesKey(partner);
+      const all = b64ToBytes(urlB64ToStd(div.dataset.ct));
+      const iv  = all.slice(0,12);
+      const ct  = all.slice(12);
+      const cryptoKey = await crypto.subtle.importKey('raw', key, {name:'AES-GCM'}, false, ['decrypt']);
+      const ptBuf = await crypto.subtle.decrypt({name:'AES-GCM',iv}, cryptoKey, ct);
+      div.querySelector('.msg-body').textContent = new TextDecoder().decode(ptBuf);
+    } catch (e) {
+      console.error('decrypt msg failed', e);
+      div.querySelector('.msg-body').textContent = '[DECRYPT ERROR]';
+    }
+  }
+
+  document.querySelectorAll('.message').forEach(div => { decryptDiv(div); });
+
+  /* ================= CIFRATURA INVIO PRIVATO ======================== */
+  const form         = document.getElementById('sendMsgForm');
+  const privBtn      = document.getElementById('sendPrivateBtn');
+  const broadBtn     = document.getElementById('sendBroadcastBtn');
+  const txtInput     = document.getElementById('msgContent');
+  const sel          = document.getElementById('receiverSelect');
+
+  let lastSubmitMode = 'broadcast';
+  broadBtn.addEventListener('click', () => { lastSubmitMode='broadcast'; });
+  privBtn.addEventListener('click',  () => { lastSubmitMode='private';  });
+
+  form.addEventListener('submit', async ev => {
+    if (lastSubmitMode !== 'private') {
+      return; // broadcast: submit normale
+    }
+    ev.preventDefault();
+
+    const receiver = sel.value;
+    if (!receiver) { alert('Select a user'); return; }
+    const plaintext = txtInput.value.trim();
+    if (!plaintext) { alert('Message empty'); return; }
+
+    try {
+      const key = await getAesKey(receiver); // crea se manca
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const cryptoKey = await crypto.subtle.importKey('raw', key, {name:'AES-GCM'}, false, ['encrypt']);
+      const ctBuf = await crypto.subtle.encrypt({name:'AES-GCM',iv}, cryptoKey, new TextEncoder().encode(plaintext));
+
+      // concat iv + ct
+      const raw = new Uint8Array(iv.length + ctBuf.byteLength);
+      raw.set(iv,0);
+      raw.set(new Uint8Array(ctBuf), iv.length);
+      const payload = bytesToUrlB64(raw);
+
+      const fd = new FormData(form);
+      fd.set('content', payload);
+      fd.set('sendPrivate', 'true');
+      fd.set('receiverUsername', receiver);
+
+      const resp = await fetch('/messages/send', {method:'POST', body:fd});
+      if (!resp.ok) {
+        alert('Errore invio messaggio: '+resp.status);
+        return;
+      }
+      txtInput.value='';
+      window.location.href='/messages';
+    } catch (e) {
+      console.error('private send failed', e);
+      alert('Errore durante la cifratura / invio del messaggio privato.');
     }
   });
 });
 </script>
+
+
 </body>
 </html>

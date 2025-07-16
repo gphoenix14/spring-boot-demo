@@ -3,7 +3,6 @@ package ecampus.academy.project.service;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,69 +15,81 @@ import ecampus.academy.project.model.Message;
 import ecampus.academy.project.model.User;
 import ecampus.academy.project.repository.MessageRepository;
 import ecampus.academy.project.repository.UserRepository;
-import ecampus.academy.project.util.CryptoUtils;
 
 @Service
 public class MessageService {
 
-private final MessageRepository messageRepository;
-private final UserRepository userRepository;
-private final Set<SseEmitter> emitters=Collections.synchronizedSet(new HashSet<>());
+    private final MessageRepository messageRepository;
+    private final UserRepository userRepository;
+    private final ChatKeyService chatKeyService;
 
-@Autowired
-public MessageService(MessageRepository messageRepository,UserRepository userRepository){
-this.messageRepository=messageRepository;
-this.userRepository=userRepository;
-}
+    private final Set<SseEmitter> emitters =
+            Collections.synchronizedSet(new HashSet<>());
 
-/* salva messaggio (privato o broadcast) */
-public Message save(Message message,String senderUsername,boolean isBroadcast,String receiverUsername){
-User sender=userRepository.findByUsername(senderUsername)
-        .orElseThrow(() -> new IllegalArgumentException("Utente mittente non trovato"));
-message.setSender(sender);
+    @Autowired
+    public MessageService(MessageRepository messageRepository,
+                          UserRepository userRepository,
+                          ChatKeyService chatKeyService) {
+        this.messageRepository = messageRepository;
+        this.userRepository    = userRepository;
+        this.chatKeyService    = chatKeyService;
+    }
 
-if(!isBroadcast){
-    if(receiverUsername==null||receiverUsername.isBlank())
-        throw new IllegalArgumentException("Username destinatario mancante");
-    User receiver=userRepository.findByUsername(receiverUsername)
-        .orElseThrow(() -> new IllegalArgumentException("Utente destinatario non trovato"));
-    message.setReceiver(receiver);
-    message.setContent(CryptoUtils.rsaEncrypt(message.getContent(),receiver.getPublicKey())); // ⇐ cifra con chiave pubblica
-    message.setBroadcast(false);
-}else{
-    message.setReceiver(null);
-    message.setBroadcast(true);             // broadcast resta in chiaro
-}
+    /**
+     * Salva un messaggio. Per i broadcast il contenuto resta in chiaro.
+     * Per i privati il contenuto è atteso GIÀ cifrato lato client (AES‑GCM)
+     * e viene salvato così com'è. Qui ci limitiamo a garantire che la chat‑key
+     * esista (creandola se necessario).
+     */
+    public Message save(Message message, String senderUsername,
+                        boolean isBroadcast, String receiverUsername) {
 
-if(message.getTimestamp()==null)
-    message.setTimestamp(LocalDateTime.now());
+        User sender = userRepository.findByUsername(senderUsername)
+                .orElseThrow(() -> new IllegalArgumentException("Mittente non trovato"));
+        message.setSender(sender);
 
-return messageRepository.save(message);
-}
+        if (!isBroadcast) {
+            if (receiverUsername == null || receiverUsername.isBlank()) {
+                throw new IllegalArgumentException("Destinatario mancante");
+            }
 
-/* stream e query */
-public Page<Message> findAllRelevantMessages(String currentUsername, Pageable pageable){
-    User current = userRepository.findByUsername(currentUsername)
-                    .orElseThrow(() -> new IllegalArgumentException("Utente non trovato"));
-    return messageRepository.findRelevantMessages(current.getId(), pageable);
-}
+            User receiver = userRepository.findByUsername(receiverUsername)
+                    .orElseThrow(() -> new IllegalArgumentException("Destinatario non trovato"));
+            message.setReceiver(receiver);
+            message.setBroadcast(false);
 
+            // assicura chat‑key (creata se prima volta)
+            chatKeyService.getOrCreate(senderUsername, receiverUsername);
 
-public List<Message> findAllMessagesBetweenUsers(Long senderId,Long receiverId){
-return messageRepository.findAllMessagesBetweenUsers(senderId,receiverId);
-}
+            // NESSUNA cifratura server: content già cifrato lato client.
+            // (Se vuoi fallback server-side, avvisami e lo aggiungiamo.)
+        } else {
+            message.setReceiver(null);
+            message.setBroadcast(true);
+        }
 
-public List<Message> findAll(){return messageRepository.findAll();}
+        if (message.getTimestamp() == null) {
+            message.setTimestamp(LocalDateTime.now());
+        }
 
-public void addEmitter(SseEmitter e){emitters.add(e);}
-public void removeEmitter(SseEmitter e){emitters.remove(e);}
-  public void delete(Long messageId, String currentUsername) {
+        return messageRepository.save(message);
+    }
+
+    public Page<Message> findAllRelevantMessages(String currentUsername, Pageable pageable) {
+        User current = userRepository.findByUsername(currentUsername)
+                .orElseThrow(() -> new IllegalArgumentException("Utente non trovato"));
+        return messageRepository.findRelevantMessages(current.getId(), pageable);
+    }
+
+    public void delete(Long messageId, String currentUsername) {
         Message m = messageRepository.findById(messageId)
                 .orElseThrow(() -> new IllegalArgumentException("Messaggio non trovato"));
-
         if (!m.getSender().getUsername().equals(currentUsername)) {
             throw new IllegalStateException("Non puoi cancellare messaggi altrui!");
         }
         messageRepository.delete(m);
     }
+
+    public void addEmitter(SseEmitter e)   { emitters.add(e); }
+    public void removeEmitter(SseEmitter e){ emitters.remove(e); }
 }
